@@ -14,6 +14,7 @@ from langgraph.prebuilt import ToolNode
 from react_agent.configuration import Configuration
 from react_agent.state import InputState, State
 from langchain_core.tools import tool
+from react_agent.tools import get_btc_statistics
 
 # Define allowed tools explicitly
 # @tool
