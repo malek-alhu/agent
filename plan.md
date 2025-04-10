@@ -28,11 +28,11 @@ The `QuanticsToolInput` Pydantic model will enforce the following rules on the i
 *   **`time_filters`:**
     *   **Type:** Must be a `dictionary` mapping strings to lists of booleans (`Dict[str, List[bool]]`).
     *   **Required:** Yes (Planned change).
-    *   **Constraint:** Pydantic enforces the basic type. Expected keys (`"months"`, `"daysOfWeek"`, `"daysOfMonth"`) and list lengths (12, 5, 31 respectively) are assumed by the API logic but not strictly enforced by this model without further custom validation.
+    *   **Constraint:** Pydantic enforces the basic type (`Dict[str, List[bool]]`). A custom validator will enforce required keys (`"months"`, `"daysOfWeek"`, `"daysOfMonth"`) and exact list lengths (12, 5, 31 respectively).
 *   **`trading_hours`:**
     *   **Type:** Must be a `dictionary` mapping strings to integers (`Dict[str, int]`).
     *   **Required:** Yes (Planned change).
-    *   **Constraint:** Pydantic enforces the basic type. Expected keys (`"startHour"`, `"startMin"`, `"endHour"`, `"endMin"`) and valid hour/minute ranges are assumed by the API logic but not strictly enforced by this model without further custom validation.
+    *   **Constraint:** Pydantic enforces the basic type (`Dict[str, int]`). A custom validator will enforce required keys (`"startHour"`, `"startMin"`, `"endHour"`, `"endMin"`) and valid value ranges (Hour: 0-23, Minute: 0-59).
 
 **Tasks:**
 
@@ -60,6 +60,16 @@ The `QuanticsToolInput` Pydantic model will enforce the following rules on the i
     *   **Details:** Ensure `end_date` is greater than or equal to `start_date`. Import necessary Pydantic components (`validator` or `model_validator`).
     *   **File:** `chat-agent/src/react_agent/tools.py`
 
+9.  **Add `time_filters` Validator:**
+    *   **Action:** Implement a Pydantic validator within the `QuanticsToolInput` model.
+    *   **Details:** Ensure the dictionary contains exactly the keys `"months"`, `"daysOfWeek"`, `"daysOfMonth"`. Ensure the corresponding boolean lists have lengths 12, 5, and 31 respectively.
+    *   **File:** `chat-agent/src/react_agent/tools.py`
+
+10. **Add `trading_hours` Validator:**
+    *   **Action:** Implement a Pydantic validator within the `QuanticsToolInput` model.
+    *   **Details:** Ensure the dictionary contains exactly the keys `"startHour"`, `"startMin"`, `"endHour"`, `"endMin"`. Ensure hours are between 0-23 and minutes are between 0-59.
+    *   **File:** `chat-agent/src/react_agent/tools.py`
+
 6.  **Modify `bar_period` Field:**
     *   **Action:** Update the Pydantic model definition for `bar_period`.
     *   **Details:** Ensure `ge=1` constraint is present. Update description to specify *minutes*.
@@ -78,6 +88,6 @@ The `QuanticsToolInput` Pydantic model will enforce the following rules on the i
 **Implementation Steps (Code Mode):**
 
 1.  Read `chat-agent/src/react_agent/tools.py`.
-2.  Prepare an `apply_diff` patch incorporating all the modifications outlined in the tasks above (Literal definition, field updates, validator addition).
+2.  Prepare an `apply_diff` patch incorporating all the modifications outlined in the tasks above (Literal definition, field updates, `end_date` validator addition, `time_filters` validator addition, `trading_hours` validator addition).
 3.  Apply the diff to the file.
 4.  Verify the changes.
