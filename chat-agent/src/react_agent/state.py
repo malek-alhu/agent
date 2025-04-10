@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Sequence, Optional, Dict, Any
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
@@ -54,6 +54,12 @@ class State(InputState):
     """
 
     # Additional attributes can be added here as needed.
+    tool_parameters: Optional[Dict[str, Any]] = field(default=None)
+    """Optional dictionary to hold parameters intended for a tool call."""
+
+    structured_tool_output: Optional[Dict[str, Any]] = field(default=None)
+    """Optional dictionary to hold the structured result from a tool call."""
+
     # Common examples include:
     # retrieved_documents: List[Document] = field(default_factory=list)
     # extracted_entities: Dict[str, Any] = field(default_factory=dict)

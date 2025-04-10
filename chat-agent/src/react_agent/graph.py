@@ -4,9 +4,10 @@ Works with a chat model with tool calling support.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Literal, cast
+import json # Import the json module
+from typing import Dict, List, Literal, cast, Any
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
@@ -14,7 +15,7 @@ from langgraph.prebuilt import ToolNode
 from react_agent.configuration import Configuration
 from react_agent.state import InputState, State
 from langchain_core.tools import tool
-from react_agent.tools import get_btc_statistics
+from react_agent.tools import TOOLS # Import the dynamically populated list
 
 # Define allowed tools explicitly
 # @tool
@@ -23,7 +24,7 @@ from react_agent.tools import get_btc_statistics
 #     return "Weather data"
 
 
-ALLOWED_TOOLS = [get_btc_statistics]
+ALLOWED_TOOLS = TOOLS # Use the imported list
 from react_agent.utils import load_chat_model
 
 # Define the function that calls the model
@@ -77,6 +78,56 @@ async def call_model(
     return {"messages": [response]}
 
 
+# Define the function that processes tool results
+async def process_tool_results(state: State) -> Dict[str, Any]:
+    """Processes the output of the tool node, formats a summary, and updates the state."""
+    last_message = state.messages[-1]
+    if not isinstance(last_message, ToolMessage):
+        # This should not happen in the planned flow, but is a safeguard
+        print("Warning: Expected last message to be ToolMessage, but got:", type(last_message))
+        return {}
+
+    tool_output = last_message.content
+    summary = "Tool execution summary:\n"
+
+    # Attempt to parse if it's a JSON string
+    parsed_output = None
+    if isinstance(tool_output, str):
+        try:
+            parsed_output = json.loads(tool_output)
+            # If parsing succeeds, treat it as a dictionary for further processing
+            tool_output = parsed_output
+        except json.JSONDecodeError:
+            # If it's not valid JSON, just report the raw string content
+            summary += f"Received non-JSON string output: {tool_output}\n"
+            # Keep tool_output as the original string for the final summary part
+
+    if isinstance(tool_output, dict):
+        # Store the structured output in state (optional per plan)
+        # Note: This requires the State class to have this field defined.
+        # state.structured_tool_output = tool_output # Uncomment if state is updated
+
+        # Generate summary from the dictionary structure
+        # Check for success/error keys common in our API response model
+        success = tool_output.get("success")
+        error_msg = tool_output.get("error")
+        if success is False and error_msg:
+             summary += f"Tool reported failure: {error_msg}\n"
+        else:
+            # Fallback for other dictionary structures if needed
+            summary += f"Tool Result (parsed dict): {tool_output}\n"
+            # You could add more specific parsing here if successful calls return other known keys
+            # e.g., charts_html = tool_output.get("charts_html")
+
+    elif not isinstance(tool_output, str): # Handle cases where output wasn't a string or a dict
+         summary += f"Received unexpected tool output format: {type(tool_output)}\nContent: {tool_output}\n"
+
+    # Return summary as an AIMessage to be added to the history
+    # Use a unique ID related to the tool call to potentially help tracing/updates
+    summary_message_id = f"ai_tool_summary_{last_message.tool_call_id}"
+    return {"messages": [AIMessage(content=summary.strip(), id=summary_message_id)]}
+
+
 # Define a new graph
 
 builder = StateGraph(State, input=InputState, config_schema=Configuration)
@@ -84,6 +135,7 @@ builder = StateGraph(State, input=InputState, config_schema=Configuration)
 # Define the two nodes we will cycle between
 builder.add_node(call_model)
 builder.add_node("tools", ToolNode(ALLOWED_TOOLS, handle_tool_errors=True))
+builder.add_node(process_tool_results) # Add the new node
 
 # Set the entrypoint as `call_model`
 # This means that this node is the first one called
@@ -114,9 +166,14 @@ builder.add_conditional_edges(
     route_model_output,
 )
 
-# Add a normal edge from `tools` to `call_model`
-# This creates a cycle: after using tools, we always return to the model
-builder.add_edge("tools", "call_model")
+# Remove the direct edge from tools back to call_model
+# builder.add_edge("tools", "call_model")
+
+# Add edge from `tools` to our new processing node
+builder.add_edge("tools", "process_tool_results")
+
+# Add edge from our processing node back to `call_model`
+builder.add_edge("process_tool_results", "call_model")
 
 # Compile the builder into an executable graph
 # You can customize this by adding interrupt points for state updates
