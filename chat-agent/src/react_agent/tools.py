@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field, ValidationError, validator
 
+from .stats_config import AVAILABLE_STATS # &lt;-- Import new config
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -128,6 +130,7 @@ class QuanticsApiResponseModel(BaseModel):
     charts_html: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    stat_output_description: Optional[str] = Field(None, description="Description of the output specific to the statistic called.") # &lt;-- New field
 # --- Authentication ---
 
 # NOTE: Caching removed to address potential token expiry issues.
@@ -254,13 +257,18 @@ async def _call_quantics_stat_api(stat_name: str, input_data: QuanticsToolInput)
             if "data" not in response_data or "metadata" not in response_data:
                  raise ValueError("API response missing expected 'data' or 'metadata' keys.")
 
+            # Find the output description from the config
+            stat_config = next((item for item in AVAILABLE_STATS if item["name"] == stat_name), None)
+            output_desc = stat_config.get("output_description") if stat_config else None
+
             # Parse and validate using Pydantic model
             # We map the API's structure to our simpler response model
             api_response = QuanticsApiResponseModel(
                 success=response_data.get("metadata", {}).get("success", False),
                 charts_html=response_data.get("data", {}).get("charts_html"),
                 metadata=response_data.get("metadata"),
-                error=response_data.get("error") # Include error if API reports one
+                error=response_data.get("error"), # Include error if API reports one
+                stat_output_description=output_desc # &lt;-- Populate new field
             )
             print(f"--- Quantics API Call Successful: {stat_name} ---")
             return api_response
@@ -282,26 +290,7 @@ async def _call_quantics_stat_api(stat_name: str, input_data: QuanticsToolInput)
 
 # --- Dynamic Tool Factory ---
 
-# Configuration for available statistics tools
-# Add more entries based on the Quantics API documentation
-AVAILABLE_STATS = [
-    {
-        "name": "Volatility",
-        "description": "Fetches volatility analysis based on price fluctuations for the specified asset and period.",
-    },
-    {
-        "name": "Volume",
-        "description": "Fetches trading volume analysis over specified periods for the given asset.",
-    },
-    {
-        "name": "Cumulative Price",
-        "description": "Calculates and fetches the accumulated price movement over time for the asset.",
-    },
-    # Add more stats here as needed from the PDF documentation, e.g.:
-    # { "name": "Price Change", "description": "Fetches price change statistics." },
-    # { "name": "RSI-Cross-Above", "description": "Detects RSI crossing above a threshold." },
-    # { "name": "MA-Cross-Below", "description": "Detects Moving Average crossing below another." },
-]
+# Configuration moved to stats_config.py
 
 def create_quantics_tool(stat_config: dict) -> Any:
     """
